@@ -1,0 +1,8 @@
+		.start	 main
+
+main    addi     r1,r0,3     ;adds 3 to r0 (always 0) and stores the result in r1
+        addi     r2,r0,5     ;adds 5 to r0 and stores the result in r2
+        add      r10,r1,r2   ;adds the contents of r1 and r2, and stores the result in r10 
+        halt                 ;stops execution 
+		   
+		 

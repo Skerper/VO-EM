@@ -1,0 +1,145 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;            VO-EM.dls             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;    Elliott Smith (July 2016)     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;----------------------------------------------------------------------------------------------;
+;This file contains memory offsets and helpful routines for the VO-EM 32 bit virtual console.  ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;IRQ Jump Table Structure;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;Note that this is backwards to the jump table order in the DLX specification.;;;;;;;;;;;;
+;;;;;;;The commented hardware interrupts indicate the default IRQ settings on device boot.;;;;;;
+			.seg	bank0
+IRQtable 	                        ;<--- if you load this into MBR using movi2s, this jump 
+									;table will be used to handle interrupts and exceptions.
+IRQ7		DMAComp					;DMA Complete
+IRQ6		rfe		
+IRQ5		rfe						;Vertical blank complete
+IRQ4		rfe						;Horizontal blank complete
+IRQ3		rfe	
+IRQ2		rfe						;Gamepad input detected
+IRQ1		rfe	
+IRQ0		rfe	
+UTE			rfe						;called by the 'trap' opcode
+OFE			rfe						;(currently unsupported)
+MPE			rfe						;(currently unsupported)
+IME			rfe						;called when a misaligned read/write is attempted
+IIE			rfe						;called when execution of an illegal opcode is attempted
+FIE			rfe						;(currently unsupported)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Variable offsets;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;When accessing a variable in another bank of memory, due to assembler constraints, you have to;
+;input the offset manually. This is done in the format (for example): 						   ;
+;			lw 		r1,my_var+BANK3(r29)  ;loads my_var which was declared in .seg bank3,	   ;
+;										  ;assuming r29 holds the lower memory offset (16#4000 ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+BANK0		.equ	0;		
+BANK1		.equ	-16#4000		
+BANK2		.equ	-16#8000
+BANK3		.equ	-16#C000
+BANK4		.equ	-16#10000
+BANK5		.equ	-16#14000
+SAVE		.equ	-16#18000
+RAM			.equ	-16#19000
+ERAM		.equ	-16#1D000
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;Register offsets;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;These variables must be loaded into registers in order to use the variable offsets above in   ;
+;save/load operations.                                                                         ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+			.seg	bank0
+OS_HIROM	.wordu	16#4000
+OS_RAM		.wordu	16#8000
+OS_GPU		.wordu	16#10000
+OS_ERAM		.wordu	16#20000
+OS_ROMINFO	.wordu	16#FFFF0000
+OS_HARDWARE .wordu	16#FFFFFF00
+
+STACK_START	.wordu	16#8000
+
+			.seg	ram
+stack		.space	10#2048
+
+;Call this function to set up the top 5 registers with the conventional offsets
+			.seg	bank0
+os_setup	lw		r26,OS_HIROM
+			lw		r27,OS_RAM
+			lw		r28,OS_ERAM
+			lw		r29,OS_GPU
+			lw		r30,STACK_START
+			jr		r31
+			
+;GPU internal offsets
+DMA_GO		.equ	16#730F 
+SPRITE_IMG	.equ	16#0000
+TILE_IMG	.equ	16#3000
+S_PALETTE	.equ	16#6000
+T_PALETTE	.equ	16#6100
+LAYER		.equ	16#6A00
+INSTANCE	.equ	16#6200
+TILE		.equ	16#6400
+CONTROL		.equ	16#7300
+DMASRC		.equ	16#7300
+DMADST		.equ	16#7304
+DMALEN		.equ	16#7308
+
+;Default IRQ presets
+IRQ_ALL		.wordu	2#101000100000000000000001 ;Write to PSW to enable all interrupts except hblank
+IRQ_NOMOVE	.wordu	2#100000000000000000000001 ;While we're waiting for DMA to complete
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;	Starts a DMA transfer to the GPU, then sleeps the CPU 	  ;
+;	until the transfer completes. 							  ;
+;	TODO: Rewrite this to use the stack so that we can queue  ;
+;		  multiple transfers and have the CPU continue 		  ;
+;         working inbetween them.			                  ;
+;-------------------------------------------------------------;
+;	r1	Source <- Absolute start address of transfer data     ;
+;	r2	Dest   <- Destination address IN GPU of transfer	  ;
+;   r3	Length <- Length of data block in BYTES				  ;
+;-------------------------------------------------------------;
+;	Uses:	r1,r2,r3,r15     								  ;	
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+			
+sdma_r31	.equ	-4
+sdma_len	.equ	10#4
+			.seg	bank0
+StartDMA	addi	r30,r30,sdma_len
+			sw		sdma_r31(r30),r31
+			sw		DMASRC(r29),r1		;set the source
+			sw		DMADST(r29),r2		;Set the destination
+			sw		DMALEN(r29),r3		;set the length
+			lw		r1,IRQ_NOMOVE(r0)
+			movi2s	psw,r1				;enable interrupts
+			addi	r1,r0,1		
+DMAWait		beqz	r1,DMAEnd			;lol this completely defeats the purpose of interrupt requests
+			sb		DMA_GO(r29),r1		;GO!
+			wait
+			j		DMAWait	
+DMAEnd		lw		r31,sdma_r31(r30)
+			subi	r30,sdma_len
+			jr		r31					;and we're done!
+			
+DMAComp		clr		r1
+			rfe		
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;YOUR PROGRAM HERE!;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-------------------------------------------------------------;
+;If you don't want to use the linker, you can just write your ;
+;program under here! ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+			.seg	bank0
+			.start	main
+main		jal		os_setup
+			nop		;<---- this is where you start!
+			j		main	
+
+
+
+

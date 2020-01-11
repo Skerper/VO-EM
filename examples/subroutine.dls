@@ -1,0 +1,24 @@
+RAM_OFFSET  .equ    16#8000     
+		
+		    .start  main
+main        addui   r30,r0,RAM_OFFSET
+            addi    r1,r0,3
+            addi    r2,r0,4
+            jal     multiply
+            halt 
+
+
+adder       add     r1,r1,r2
+            jr      r31
+	 
+mult_r3     .equ    0	 
+	 
+multiply    sw      mult_r3(r30),r3      
+            clr     r3       
+mult_loop   beqz    r2,mult_end 
+            add     r3,r3,r1 
+            subi    r2,r2,1  
+            j       mult_loop 
+mult_end    add     r1,r0,r3
+            lw      r3,mult_r3(r30)
+            jr      r31

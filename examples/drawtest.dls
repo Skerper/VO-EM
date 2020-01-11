@@ -1,0 +1,26 @@
+ IRQ7		 rfe		     		
+ IRQ6		 rfe		
+ IRQ5		 rfe		     			
+ IRQ4		 rfe							
+ IRQ3		 rfe	
+ IRQ2		 rfe        
+ IRQ1		 rfe	
+ IRQ0		 rfe                     	
+ 
+ RAM_OFFSET  .equ     16#8000
+ GP_OFFSET   .wordu   16#FFFFFF00
+ OL_OFFSET   .wordu   16#30000
+ listenTo    .wordu   2#000001000000000000000001 ;our psw settings
+             .start   main 
+ 
+ main        lw       r2,OL_OFFSET
+			 addui    r4,r0,2#01000011
+             addui    r3,r0,2#111111
+ loop		 and      r1,r3,r2
+			 ori      r1,r2,16#40
+			 sb       (r2),r1		  
+			 addui    r2,r2,1
+			 j        loop
+  		
+
+

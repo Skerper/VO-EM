@@ -1,0 +1,75 @@
+ IRQ7        rfe		     		
+ IRQ6        rfe		
+ IRQ5        j        vblank		       			
+ IRQ4        rfe							
+ IRQ3        rfe	
+ IRQ2        rfe
+ IRQ1        rfe	
+ IRQ0        rfe                     	
+ 
+ listenTo    .wordu   2#001000000000000000000001 ;our psw settings
+ GP_OFFSET   .wordu   16#FFFFFF00
+ DP_OFFSET   .wordu   16#30000
+ 
+             .start   main 
+ main        lw       r10,GP_OFFSET         ;load gamepad offset
+             lw       r12,DP_OFFSET         ;load screen pos
+             lw       r1,listenTo           ;load our psw settings
+             movi2s   psw,r1                ;move irq settings into psw register
+             addui    r8,r0,60              ;set starting position x
+             addui    r9,r0,40              ;and y
+ loop        wait                           ;wait for something to happen
+             j        loop                  ;go back to waiting
+  
+ ; x 		 <--- r8       (horizontal position of the player)
+ ; y 		 <--- r9       (vertical position of the player)
+ ; xv		 <--- r6       (whether we're going left, right, or neither)
+ ; yv		 <--- r7       (whether we're going up, down, or neither)
+ ; gamepad       <--- r10      (the offset of the controls)
+ ; colour	 <--- r11      (the colour that we're drawing)
+ ; screen        <--- r12      (the offset of the screen)
+ 
+ vblank      add      r8,r8,r6              ;x+=xv;
+             add      r9,r9,r7              ;y+=yv;
+             lb       r5,(r10)              ;load the first byte of the gamepad register (up/down)
+             beqz     r5,input_lr           ;only change direction if a button is being pressed
+             add      r6,r0,r5              ;set the yv to the register value
+             add      r7,r0,r0              ;can only move horizontal OR vertical
+ input_lr    lb       r5,1(r10)             ;load the second byte (left/right)
+             beqz     r5,input_end          ;same deal
+             add      r7,r0,r5              ;but with xv
+             add      r6,r0,r0              ;can only move horizontal OR vertical
+ input_end   slti     r3,r8,0               ;if(x<0){
+             beqz     r3,wrap_pos_x         ; 
+             addi     r8,r0,10#119          ;	x=119;}
+ wrap_pos_x  sgti     r3,r8,10#119          ;if(x>119){
+             beqz     r3,wrap_y             ; 
+             addui    r8,r0,0               ;   x=0;}
+ wrap_y      slti     r3,r9,0               ;if(y<0){
+             beqz     r3,wrap_pos_y         ; 
+             addi     r9,r0,10#79           ;   y=79;}    
+ wrap_pos_y  sgti     r3,r9,10#79           ;if(y>79){
+             beqz     r3,vb_draw            ;
+             addui    r9,r0,0               ;   y=0;}
+ vb_draw     add      r1,r0,r8              ;find pixel offset positions
+             add      r2,r0,r9              ;by putting x and y into r1 and r2
+             jal      findOS                ;and calling the function we made earlier
+             addu     r1,r1,r12             ;add the screen offset to the pixel offset
+             addui    r11,r11,1             ;increment our colour for a cool effect
+             ori      r11,r11,2#01000000    ;(but make sure the on switch stays on)
+             sb       (r1),r11              ;save our colour to our pixel offset!
+             rfe                            ;and we're done with this interrupt. 
+
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;findOS(r1:x, r2:y):uint                          ;
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;Finds the memory offset on a 240x160 screen      ;
+ ;given a provided x and y position. Trashes r2    ;
+ ;and returns result in r1.                        ;
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ 		 
+ findOS      beqz     r2,f_end      ;is y zero?
+             addui    r1,r1,10#120  ;no. Add one row to the offset
+             subui    r2,r2,1       ;subtract one from y 
+             j        findOS        ;and loop
+ f_end       jr       r31

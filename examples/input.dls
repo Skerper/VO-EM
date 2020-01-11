@@ -1,0 +1,47 @@
+ IRQ7		 rfe		     		
+ IRQ6		 rfe		
+ IRQ5		 rfe		     			
+ IRQ4		 rfe							
+ IRQ3		 rfe	
+ IRQ2		 j        input           ;handle gamepad input
+ IRQ1		 rfe	
+ IRQ0		 rfe                     	
+ 
+ RAM_OFFSET  .equ     16#8000
+ GP_OFFSET   .wordu   16#FFFFFF00
+ listenTo    .wordu   2#000001000000000000000001 ;our psw settings
+             .start   main 
+ 
+ main        addui    r30,r0,RAM_OFFSET
+             lw       r10,GP_OFFSET 
+             lw       r1,listenTo           ;load our psw settings
+             movi2s   psw,r1                ;move into psw register
+ loop        wait                           ;wait for something to happen
+             j        loop                  ;go back to waiting
+  		
+  		
+ input       lb       r5,(r10)              ;load the first byte of the gamepad register (up/down)
+			 add      r6,r6,r5
+             lb       r5,1(r10)             ;load the second byte (left/right)
+             add      r7,r7,r5 
+			 lb       r5,2(r10)             ;load the third byte (a/b)
+			 andi     r5,r5,2#00000001      ;strip it down to just the A button
+			 beqz     r5,input_end
+			 add	  r1,r0,r6
+			 add      r2,r0,r7
+			 jal      multiply
+ input_end   rfe                            ;go back to the main program
+		 
+
+ mult_r3     .equ    0	  
+ 	 
+ multiply    sw      mult_r3(r30),r3      
+             clr     r3       
+ mult_loop   beqz    r2,mult_end 
+             add     r3,r3,r1 
+             subi    r2,r2,1  
+             j       mult_loop 
+ mult_end    add     r1,r0,r3
+             lw      r3,mult_r3(r30)
+             jr      r31
+

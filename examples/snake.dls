@@ -1,0 +1,88 @@
+ IRQ7		 rfe		     		
+ IRQ6		 rfe		
+ IRQ5		 j		  vblank		       			
+ IRQ4		 rfe							
+ IRQ3		 rfe	
+ IRQ2		 j        input           ;handle gamepad input
+ IRQ1		 rfe	
+ IRQ0		 rfe                     	
+ 
+ GP_OFFSET   .wordu   16#FFFFFF00
+ DP_OFFSET   .wordu   16#30000
+ listenTo    .wordu   2#001001000000000000000001 ;our psw settings
+             .start   main 
+			 
+; reserved registers:
+; x 		<--- r8
+; y 		<--- r9
+; xv		<--- r6
+; yv		<--- r7
+; GP_OFFSET <--- r10
+; colour	<--- r11
+; screen    <--- r12
+; moved?    <--- r13
+
+ 
+ main        lw       r10,GP_OFFSET 
+			 addui    r11,r0,2#01110000     ;set snake colour
+			 lw		  r12,DP_OFFSET         ;load screen pos
+             lw       r1,listenTo           ;load our psw settings
+			 addui    r8,r0,120/2           ;set starting position
+			 addui    r9,r0,80/2
+             movi2s   psw,r1                ;move into psw register
+ loop        wait                           ;wait for something to happen
+             j        loop                  ;go back to waiting
+  		
+  		
+ input       beqz     r13,vb_conv           ;prevent ultra fast movements that allow us to double back
+			 addi     r13,r0,0
+             lb       r5,(r10)              ;load the first byte of the gamepad register (up/down)
+			 beqz     r5,i_lr               ;only change direction if a button is being pressed
+			 bnez     r6,i_lr               ;can't reverse direction
+			 add      r6,r0,r5              ;set the yv to the register value
+			 add      r7,r0,r0              ;can only move horizontal OR vertical
+ i_lr        lb       r5,1(r10)             ;load the second byte (left/right)
+             beqz     r5,input_end          ;same deal
+			 bnez	  r7,input_end          ;same deal
+			 add      r7,r0,r5              ;but with xv
+			 add      r6,r0,r0              ;can only move horizontal OR vertical
+ input_end   rfe                            ;go back to the main program
+		 
+		 
+ vblank      addi     r13,r0,1
+             add      r8,r8,r6
+			 slti     r3,r8,0
+			 beqz     r3,vb_pos_x
+			 addi	  r8,r0,10#120
+ vb_pos_x    sgti     r3,r8,10#120
+			 beqz     r3,vb_y
+			 addui    r8,r0,1
+ vb_y        slti     r3,r9,0
+			 beqz     r3,vb_pos_y
+			 addi	  r9,r0,10#80
+ vb_pos_y    add      r9,r9,r7
+			 sgti     r3,r9,10#80
+			 beqz     r3,vb_conv
+			 addui    r9,r0,1
+ vb_conv	 add      r1,r0,r8
+			 add      r2,r0,r9
+			 jal      findOS
+			 addu	  r1,r1,r12
+			 sb       (r1),r11
+			 rfe
+			 
+			 
+			 
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;findOS(r1:x, r2:y):uint                          ;
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+ ;Finds the memory offset on a 120x80 screen      ;
+ ;given a provided x and y position. Trashes r2    ;
+ ;and returns result in r1.                        ;
+ ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+			 
+ findOS  	 beqz	  r2,f_end
+             addui    r1,r1,10#120
+			 subui    r2,r2,1
+			 j		  findOS
+ f_end       jr       r31

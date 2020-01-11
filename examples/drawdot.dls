@@ -1,0 +1,17 @@
+ SCREEN		.word	16#30000
+ 			
+			.start  main
+ main       lw		r10,SCREEN  	;Our offset for the screen
+ 			addui	r1,2#01000000   ;this contains the on switch
+			clr		r2              ;r2 <---- our offset. Start in the top left
+			addu	r5,r1,r0        ;r5 <---- our current colour + the on switch
+ loop		sgei    r4,r2,120*80    ;Check if we've gone past the last pixel on the screen...
+			beqz    r4,noloop       ;No, we haven't. Go to the end.
+			clr     r2              ;Yes, we have. First, clear our offset 
+			addui   r5,r5,1         ;Go to the next colour
+			andi	r5,r5,2#00111111;(mask to limit to 64 colours)
+			or		r5,r1,r5        ;Add the on switch to our new colour
+ noloop		addu    r3,r2,r10       ;r3 <--- our offset + screen position in memory
+			sb		(r3),r5         ;save our colour to our current pixel
+			addui	r2,r2,1         ;move to the next pixel
+ 			j		loop            ;loop!

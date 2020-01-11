@@ -1,0 +1,12 @@
+a     .word     5     ;let a = 5
+b     .word     4     ;let b = 4
+myval .equ      9
+      .start  main     ;start the program from the main label
+main     lw      r1,a     ;load four bytes from address a into register 1 (it contains 5) 
+         lw      r2,b     ;now load four bytes from b into register 2 (contains 4) 
+         clr     r3       ;sets r3 to 0. This is where we'll store our result!
+loop     beqz    r2,end   ;go to label 'end' if r2 (b) is equal to zero
+         add     r3,r3,r1 ;otherwise, add r1 to r3 and store the result back in r3
+         subi    r2,r2,1  ;subtract 1 from r2 and store the result back in r2
+         j       loop     ;go back to the loop label to see if we're done
+end      halt             ;if we're done, stop executing

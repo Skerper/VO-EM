@@ -1,0 +1,12 @@
+RAM_OFFSET  .equ   16#8000
+a           .equ   0
+b           .equ   4
+c           .equ   8  
+            addui  r30,r0,RAM_OFFSET
+            addi   r1,r0,3
+            sw     a(r30),r1
+            addi   r1,r0,8
+            sw     b(r30),r1
+            addi   r1,r0,3000
+            sw     c(r30),r1
+			halt   

@@ -1,0 +1,69 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;HelloWorld.dls - Elliott Smith (June 2016);
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;	A tutorial on setting up the VO-EM device and rendering an image to the screen.;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+		.abs					;This program will fit entirely within bank0, so we can use .abs
+		.start		main		;Set the program to begin execution from the label 'main'
+		
+GPU			.equ	16#1;0000   ;The GPU exists at 0x10000 in memory.  	
+
+TILE_IMG	.equ	16#3000     ;the image data for tiles are stored at 0x3000 in the gpu
+TILE_PAL	.equ	16#6100		;the palette data for tiles are stored at 0x6100 
+LAYER		.equ	16#6A00		;this is where layer control registers are stored
+TILE_MAP	.equ	16#6400		;this is where the tile map data is stored.
+
+;the following offsets are the addresses of the registers for block transferring data.
+;we'll need this to transfer our image and palette data to the gpu. 
+DMASRC		.equ	16#7300		
+DMADST		.equ	16#7304
+DMALEN		.equ	16#7308
+DMA_GO		.equ	16#730F 
+
+;this is our palette data. It only has two colours because our image only has two colours. 
+mypalette		.halfu	16#0000,16#7FFF
+
+;this is our "hello world" image. Each group of 3 halfwords represents one row of pixels in the tile.
+;Tile 0 is blank because the 0th tile cannot be drawn due to hardware limitations, so we put some dummy data
+;in there. 
+hello
+hello_0		 .halfu	16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#77F3,16#0000,16#0000,16#77FB,16#0000,16#0000,16#763B,16#0000,16#0000,16#05DB,16#0000,16#0000,16#75DB,16#0000,16#0000,16#743B,16#0000,16#0000,16#75FB,16#0000,16#0000,16#7639,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF
+hello_1		 .halfu	16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#9FFF,16#0000,16#0000,16#DFFF,16#0000,16#0000,16#DE3F,16#0000,16#0000,16#DDDF,16#0000,16#0000,16#DDDF,16#0000,16#0000,16#DDDF,16#0000,16#0000,16#DDDF,16#0000,16#0000,16#CE3F,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF
+hello_2		 .halfu	16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#BBFF,16#0000,16#0000,16#ABFF,16#0000,16#0000,16#AB1A,16#0000,16#0000,16#AAE9,16#0000,16#0000,16#AAEB,16#0000,16#0000,16#AAEB,16#0000,16#0000,16#AAEB,16#0000,16#0000,16#D71B,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF
+hello_3		 .halfu	16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#E7ED,16#0000,16#0000,16#F7ED,16#0000,16#0000,16#770D,16#0000,16#0000,16#B6ED,16#0000,16#0000,16#F6ED,16#0000,16#0000,16#F6ED,16#0000,16#0000,16#F6EF,16#0000,16#0000,16#F30D,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF,16#0000,16#0000,16#FFFF
+hello_length .equ	16#180
+		
+main			;first, we're going to copy the image data into the gpu. 
+				;we'll use the DMA system for this, since it's large.
+				addui	r1,r0,hello 		;this is the address of the start of our image
+				addui   r2,r0,TILE_IMG      ;this is where we want to put it
+				addui	r3,r0,hello_length 	;this is how many bytes we need to copy 
+				lhi		r4,GPU				;the GPU is too high in memory to fit in sw opcodes, so we use this offset
+				addui   r5,r0,1				;we need to write a byte to DMA_GO to start the transfer. 
+				sw		DMASRC(r4),r1       ;this saves the value of r1 to the memory address at DMASRC(7300) + the value of r4 (10000). 
+				sw		DMADST(r4),r2		;now for the destination (tile image memory)
+				sw		DMALEN(r4),r3		;and the length of the transfer.
+				sb		DMA_GO(r4),r5		;Now that's all set up, we can go!
+				;next, we set up the palette. This is small, so we won't bother with DMA.
+				lw		r1,mypalette		;colours are 16 bits, so this combines colour one and colour two into one 32bit word.
+				sw		TILE_PAL(r4),r1		;we're saving them to palette 0, which is right at the start of palette data memory. 
+				;now, we place the actual tiles on the screen!
+				addui   r1,r0,2#10000000    ;I'm doing this in binary to make it more obvious. 
+				sh		TILE_MAP(r4),r1		;the highest bit is set because this bit is the "on-off switch" for the tile
+				addui   r1,r1,1				
+				sh		TILE_MAP+2(r4),r1   ;we increment r1 by 1 to get the next index, and TILE_MAP by 2 because 
+				addui	r1,r1,1				;tiles are 16bits each. We have the top 8 bits set to zero, because 
+				sh		TILE_MAP+4(r4),r1   ;the top 8 bits handle things like rotation and palette selection. 
+				addui	r1,r1,1				;We're already using palette 0, so we can leave that as-is. 
+				sh		TILE_MAP+6(r4),r1	;and we're done!
+				;Finally, we have to actually set the tile layer to "on".
+				;We've written the tiles to the map starting at offset 0 from the start of tile map memory,
+				;which is tile0, or the scrollable, non-transparent background tile layer. 
+				;Remember, each layer control register is 4 bytes. The first byte of the four handles blend mode
+				;and whether the layer is active or not. We're only interested in making it active. The least-significant
+				;bit is the one that makes it active, so
+				addui	r1,r0,1
+				sb		LAYER(r4),r1		;that's all we need to do! (note sb not sw, so we have 01 00 00 00, not 00 00 00 01)
+
+				halt
